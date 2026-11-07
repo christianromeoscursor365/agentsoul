@@ -1,14 +1,14 @@
 # AgentSoul
 
-Give OpenCode a soul — personality injection and long-term memory for your AI agent.
+Дайте OpenCode душу — внедрение личности и долговременной памяти для вашего AI-агента.
 
-## Installation
+## Установка
 
 ```bash
 npm install -g @neomei/agentsoul
 ```
 
-如果安装后提示 `command not found: agentsoul`，说明 npm 全局 bin 目录不在 PATH 中。请配置 npm 全局路径：
+Если после установки появляется ошибка `command not found: agentsoul`, значит глобальный каталог npm не в PATH. Настройте его:
 
 ```bash
 mkdir -p ~/.npm-global
@@ -17,69 +17,69 @@ echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-或使用 `npx` 直接运行（无需全局安装）：
+Или запустите через `npx` без глобальной установки:
 
 ```bash
 npx @neomei/agentsoul setup
 npx @neomei/agentsoul chat
 ```
 
-## Quick Start
+## Быстрый старт
 
 ```bash
-# 1. Configure your agent's personality (auto-registers plugin)
+# 1. Настройте личность агента (плагин регистрируется автоматически)
 agentsoul setup
 
-# 2. Launch OpenCode with soul injection
+# 2. Запустите OpenCode с внедрением личности
 agentsoul chat
 ```
 
-## Commands
+## Команды
 
-| Command | Description |
-|---------|-------------|
-| `agentsoul setup` | Interactive configuration wizard (auto-registers plugin) |
-| `agentsoul uninstall` | Remove plugin from opencode config |
-| `agentsoul chat` | Launch OpenCode TUI with soul injection |
-| `agentsoul run <message>` | Single-shot with soul injection |
-| `agentsoul serve [port]` | Headless server with soul injection |
-| `agentsoul memory list` | Show recent conversations |
-| `agentsoul memory search <query>` | Search conversation history |
-| `agentsoul memory clear` | Clear all memories |
+| Команда | Описание |
+|---------|----------|
+| `agentsoul setup` | Интерактивный мастер настройки (автоматически регистрирует плагин) |
+| `agentsoul uninstall` | Удалить плагин из конфига opencode |
+| `agentsoul chat` | Запустить OpenCode TUI с внедрением личности |
+| `agentsoul run <сообщение>` | Одноразовый запуск с внедрением личности |
+| `agentsoul serve [порт]` | Безголово́сный сервер с внедрением личности |
+| `agentsoul memory list` | Показать недавние диалоги |
+| `agentsoul memory search <запрос>` | Поиск по истории диалогов |
+| `agentsoul memory clear` | Очистить всю память |
 
-## How It Works
+## Как это работает
 
-AgentSoul injects personality files into every OpenCode session:
+AgentSoul внедряет файлы личности в каждую сессию OpenCode:
 
-1. **Soul Files** (`~/.agentsoul/soul/`)
-   - `IDENTITY.md` — Who your agent is
-   - `SOUL.md` — Core principles and speaking style
-   - `USER.md` — Who you are and your relationship
+1. **Файлы души** (`~/.agentsoul/soul/`)
+   - `IDENTITY.md` — кто ваш агент
+   - `SOUL.md` — базовые принципы и стиль общения
+   - `USER.md` — кто вы и ваши отношения
 
-2. **Memory** (`~/.agentsoul/memory.db`)
-   - SQLite storage for conversation history
-   - Recent memories are automatically injected into new sessions
+2. **Память** (`~/.agentsoul/memory.db`)
+   - Хранилище истории диалогов на SQLite
+   - Недавние записи автоматически подставляются в новые сессии
 
-3. **OpenCode Plugin** — Registered in `~/.config/opencode/opencode.json`
-   - Hooks into `experimental.chat.system.transform` to inject soul before every LLM call
-   - Hooks into `chat.message` to persist user messages
-   - Survives context compaction automatically
+3. **Плагин OpenCode** — регистрируется в `~/.config/opencode/opencode.json`
+   - Подключается к `experimental.chat.system.transform` для внедрения личности перед каждым вызовом LLM
+   - Подключается к `chat.message` для сохранения сообщений пользователя
+   - Переживает сжатие контекста автоматически
 
-## Configuration
+## Настройка
 
-After `agentsoul setup`, edit the files directly:
+После `agentsoul setup` редактируйте файлы напрямую:
 
 ```bash
-~/.agentsoul/soul/IDENTITY.md   # Name, age, personality
-~/.agentsoul/soul/SOUL.md       # Core principles, speaking style
-~/.agentsoul/soul/USER.md       # User relationship
+~/.agentsoul/soul/IDENTITY.md   # Имя, возраст, личность
+~/.agentsoul/soul/SOUL.md       # Базовые принципы, стиль общения
+~/.agentsoul/soul/USER.md       # Отношения с пользователем
 ```
 
-## Integration with OpenCode Feishu
+## Интеграция с OpenCode Feishu
 
-AgentSoul works with [@neomei/opencode-feishu](https://www.npmjs.com/package/@neomei/opencode-feishu) to give your Feishu bot a soul.
+AgentSoul работает с [@neomei/opencode-feishu](https://www.npmjs.com/package/@neomei/opencode-feishu), чтобы дать душу вашему боту в Feishu.
 
-**Prerequisite**: Both plugins must be registered in `~/.config/opencode/opencode.json`:
+**Требование**: оба плагина должны быть зарегистрированы в `~/.config/opencode/opencode.json`:
 
 ```json
 {
@@ -90,40 +90,41 @@ AgentSoul works with [@neomei/opencode-feishu](https://www.npmjs.com/package/@ne
 }
 ```
 
-**Setup**:
+**Настройка**:
 
 ```bash
-# 1. Configure AgentSoul personality
+# 1. Настройте личность AgentSoul
 agentsoul setup
 
-# 2. Configure Feishu connection
+# 2. Настройте подключение к Feishu
 npx @neomei/opencode-feishu setup
 
-# 3. Start OpenCode serve with both plugins loaded
+# 3. Запустите OpenCode serve с обоими плагинами
 opencode serve --port 19876
 ```
 
-When a Feishu user sends a message, OpenCode processes it through both plugins:
-- **AgentSoul** injects personality into the system prompt
-- **opencode-feishu** handles the Feishu WebSocket and message formatting
+Когда пользователь Feishu отправляет сообщение, OpenCode обрабатывает его через оба плагина:
 
-Memory (conversation history) is persisted automatically.
+- **AgentSoul** внедряет личность в системный промпт
+- **opencode-feishu** обрабатывает WebSocket Feishu и форматирование сообщений
 
-## Architecture
+Память (история диалогов) сохраняется автоматически.
+
+## Архитектура
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │   agentsoul     │────▶│   soul/*.md     │────▶│  stdin inject   │
-│   CLI / Plugin  │     │  (personality)  │     │  (opencode run) │
+│   CLI / Плагин  │     │  (личность)     │     │  (opencode run) │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
          │                                               │
          ▼                                               ▼
 ┌─────────────────┐                            ┌─────────────────┐
 │  memory.db      │◀───────────────────────────│  opencode TUI   │
-│  (SQLite)       │      save conversations    │  / serve        │
+│  (SQLite)       │   сохранение диалогов      │  / serve        │
 └─────────────────┘                            └─────────────────┘
 ```
 
-## License
+## Лицензия
 
 MIT

@@ -8,6 +8,9 @@ const AGENTSOUL_DIR = path.join(os.homedir(), '.agentsoul');
 const MEMORY_DB = path.join(AGENTSOUL_DIR, 'memory.db');
 const MEMORY_JSON = path.join(AGENTSOUL_DIR, 'memory.json');
 
+const TTL_DAYS = 30;
+const MAX_RECORDS = 200;
+
 let dbInstance = null;
 let dbFailed = false;
 
@@ -160,8 +163,31 @@ class JsonStore {
 
   exec(sql) {
     if (sql.includes('DELETE FROM')) {
-      this.data.conversations = [];
-      this._save();
+      if (sql.includes('WHERE id IN')) {
+        // DELETE FROM conversations WHERE id IN (SELECT id ...)
+        const match = sql.match(/LIMIT (\d+)/);
+        if (match) {
+          const toRemove = parseInt(match[1], 10);
+          const ids = store.data.conversations
+            .sort((a, b) => a.id - b.id)
+            .slice(0, toRemove)
+            .map(r => r.id);
+          store.data.conversations = store.data.conversations.filter(r => !ids.includes(r.id));
+        } else {
+          store.data.conversations = [];
+        }
+      } else if (sql.includes('WHERE timestamp <')) {
+        const tsMatch = sql.match(/(\d+)/);
+        if (tsMatch) {
+          const cutoff = parseInt(tsMatch[1], 10);
+          store.data.conversations = store.data.conversations.filter(r => r.timestamp >= cutoff);
+        } else {
+          store.data.conversations = [];
+        }
+      } else {
+        store.data.conversations = [];
+      }
+      store._save();
     }
   }
 
@@ -175,9 +201,11 @@ class JsonStore {
             session_id: params[0],
             role: params[1],
             content: params[2],
-            timestamp: params[3],
+            tags: params[3] || '',
+            timestamp: params[4],
           });
           store._save();
+          _jsonEnforceLimits(store);
         }
       },
       all(...params) {
@@ -200,6 +228,7 @@ class JsonStore {
             role: r.role,
             preview: r.content.substring(0, 80),
             time: new Date(r.timestamp * 1000).toISOString().replace('T', ' ').slice(0, 19),
+            tags: r.tags || '',
           }));
         }
         if (sql.includes('datetime(timestamp')) {
@@ -208,6 +237,7 @@ class JsonStore {
             role: r.role,
             content: r.content,
             time: new Date(r.timestamp * 1000).toISOString().replace('T', ' ').slice(0, 19),
+            tags: r.tags || '',
           }));
         }
         return result.map((r) => ({ role: r.role, content: r.content }));
@@ -216,6 +246,21 @@ class JsonStore {
   }
 
   close() {}
+}
+
+function _jsonEnforceLimits(store) {
+  // TTL cleanup
+  const cutoff = Math.floor(Date.now() / 1000) - TTL_DAYS * 86400;
+  store.data.conversations = store.data.conversations.filter(r => r.timestamp >= cutoff);
+
+  // Max records
+  if (store.data.conversations.length > MAX_RECORDS) {
+    store.data.conversations = store.data.conversations
+      .sort((a, b) => a.id - b.id)
+      .slice(MAX_RECORDS - store.data.conversations.length);
+  }
+
+  store._save();
 }
 
 async function getDb() {
@@ -252,6 +297,7 @@ async function getDb() {
           session_id TEXT,
           role TEXT,
           content TEXT,
+          tags TEXT DEFAULT '',
           timestamp INTEGER
         )
       `);
@@ -270,15 +316,58 @@ async function getDb() {
   }
 }
 
-export async function saveConversation(sessionId, role, content) {
+export async function saveConversation(sessionId, role, content, tags = '') {
   const db = await getDb();
   if (!db) return;
   try {
     db.prepare(
-      'INSERT INTO conversations (session_id, role, content, timestamp) VALUES (?, ?, ?, ?)'
-    ).run(sessionId || null, role, content, Math.floor(Date.now() / 1000));
+      'INSERT INTO conversations (session_id, role, content, tags, timestamp) VALUES (?, ?, ?, ?, ?)'
+    ).run(sessionId || null, role, content, tags, Math.floor(Date.now() / 1000));
+    await _enforceLimits(db);
   } catch {
     // Silently skip on failure to avoid breaking TUI/serve output
+  }
+}
+
+export async function saveInsight(content, tags = 'insight') {
+  return saveConversation(null, 'insight', content, tags);
+}
+
+async function _enforceLimits(db) {
+  try {
+    // TTL cleanup
+    const cutoff = Math.floor(Date.now() / 1000) - TTL_DAYS * 86400;
+    db.prepare('DELETE FROM conversations WHERE timestamp < ?').run(cutoff);
+
+    // Max records — remove oldest first
+    const count = db.prepare('SELECT COUNT(*) as c FROM conversations').get();
+    if (count.c > MAX_RECORDS) {
+      const toRemove = count.c - MAX_RECORDS;
+      db.prepare('DELETE FROM conversations WHERE id IN (SELECT id FROM conversations ORDER BY id ASC LIMIT ?)').run(toRemove);
+    }
+  } catch {}
+}
+
+export async function deleteById(id) {
+  const db = await getDb();
+  if (!db) return false;
+  try {
+    const result = db.prepare('DELETE FROM conversations WHERE id = ?').run(id);
+    return result.changes > 0;
+  } catch {
+    return false;
+  }
+}
+
+export async function pruneMemories() {
+  const db = await getDb();
+  if (!db) return 0;
+  try {
+    const cutoff = Math.floor(Date.now() / 1000) - TTL_DAYS * 86400;
+    const removed = db.prepare('DELETE FROM conversations WHERE timestamp < ?').run(cutoff);
+    return removed.changes || 0;
+  } catch {
+    return 0;
   }
 }
 
@@ -304,7 +393,7 @@ export async function listMemories(limit = 20) {
   if (!db) return [];
   return db
     .prepare(
-      "SELECT id, role, substr(content, 1, 80) as preview, datetime(timestamp, 'unixepoch') as time FROM conversations ORDER BY id DESC LIMIT ?"
+      "SELECT id, role, substr(content, 1, 80) as preview, datetime(timestamp, 'unixepoch') as time, tags FROM conversations ORDER BY id DESC LIMIT ?"
     )
     .all(limit);
 }
@@ -314,7 +403,7 @@ export async function searchMemories(query, limit = 10) {
   if (!db) return [];
   return db
     .prepare(
-      "SELECT id, role, content, datetime(timestamp, 'unixepoch') as time FROM conversations WHERE content LIKE ? ORDER BY id DESC LIMIT ?"
+      "SELECT id, role, content, datetime(timestamp, 'unixepoch') as time, tags FROM conversations WHERE content LIKE ? ORDER BY id DESC LIMIT ?"
     )
     .all(`%${query}%`, limit);
 }

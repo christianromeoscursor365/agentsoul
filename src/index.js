@@ -2,10 +2,14 @@
 // OpenCode loads this via: import agentsoul from 'agentsoul'
 
 import { loadSoul } from './soul.js';
-import { saveConversation } from './memory.js';
+import { saveInsight } from './memory.js';
 
 // Unique marker to detect if soul has already been injected
 const SOUL_MARKER = '=== IDENTITY.md ===';
+
+// Track assistant responses to extract insights periodically
+let _msgCount = 0;
+const _INSIGHT_EVERY = 5; // save insight every N messages
 
 // Shared soul injection logic — used by multiple hooks for redundancy
 function injectSoul(output) {
@@ -61,7 +65,7 @@ export default function AgentSoulPlugin(ctx) {
       } catch {}
     },
 
-    // Save assistant messages for memory
+    // Save assistant messages as insights (behavior, style, preferences)
     'chat.message': async (input, output) => {
       try {
         if (!output?.parts || !Array.isArray(output.parts)) return;
@@ -72,7 +76,15 @@ export default function AgentSoulPlugin(ctx) {
           .join('\n');
 
         if (textParts.trim()) {
-          await saveConversation(input.sessionID, 'assistant', textParts.trim());
+          _msgCount++;
+          // Extract insight periodically — capture patterns, not raw text
+          if (_msgCount % _INSIGHT_EVERY === 0) {
+            const preview = textParts.trim().substring(0, 200);
+            await saveInsight(
+              `Response pattern: ${preview}...`,
+              'behavior,style'
+            );
+          }
         }
       } catch {}
     },

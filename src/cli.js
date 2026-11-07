@@ -8,9 +8,12 @@ import { loadSoul, ensureSoulDir } from './soul.js';
 import {
   loadRecentMemories,
   saveConversation,
+  saveInsight,
   listMemories,
   searchMemories,
   clearMemories,
+  deleteById,
+  pruneMemories,
 } from './memory.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -383,22 +386,52 @@ async function cmdMemory(args) {
   try {
     if (subCmd === 'list') {
       const rows = await listMemories(20);
-      console.log('\n=== Recent Conversations ===\n');
+      console.log('\n=== Memories ===\n');
       for (const row of rows) {
-        console.log(`[${row.id}] ${row.time} | ${row.role}: ${row.preview}...`);
+        const tags = row.tags ? ` [${row.tags}]` : '';
+        console.log(`[${row.id}] ${row.time}${tags} | ${row.role}: ${row.preview}...`);
       }
     } else if (subCmd === 'search') {
       const query = args[1] || '';
       const rows = await searchMemories(query, 10);
       console.log(`\n=== Search: "${query}" ===\n`);
       for (const row of rows) {
-        console.log(`[${row.id}] ${row.time} | ${row.role}:\n${row.content}\n`);
+        const tags = row.tags ? ` [${row.tags}]` : '';
+        console.log(`[${row.id}] ${row.time}${tags} | ${row.role}:\n${row.content}\n`);
       }
+    } else if (subCmd === 'save') {
+      const text = args.slice(1).join(' ');
+      const tags = args[1] ? null : null;
+      if (!text) {
+        console.log('Usage: agentsoul memory save <text> [tag1,tag2]');
+        return;
+      }
+      // Check if last arg looks like tags (comma-separated words)
+      let content = text;
+      let tagStr = 'insight';
+      const lastArg = text.split(' ').pop();
+      if (lastArg.includes(',')) {
+        tagStr = lastArg;
+        content = text.slice(0, text.lastIndexOf(lastArg)).trim();
+      }
+      await saveInsight(content, tagStr);
+      console.log(`[AgentSoul] Insight saved [${tagStr}]`);
+    } else if (subCmd === 'delete') {
+      const id = parseInt(args[1], 10);
+      if (!id) {
+        console.log('Usage: agentsoul memory delete <id>');
+        return;
+      }
+      const ok = await deleteById(id);
+      console.log(ok ? `[AgentSoul] Record ${id} deleted` : `[AgentSoul] Record ${id} not found`);
+    } else if (subCmd === 'prune') {
+      const removed = await pruneMemories();
+      console.log(`[AgentSoul] Pruned ${removed} expired records`);
     } else if (subCmd === 'clear') {
       await clearMemories();
       console.log('[AgentSoul] Memory cleared');
     } else {
-      console.log('Usage: agentsoul memory [list|search <query>|clear]');
+      console.log('Usage: agentsoul memory [list|search <query>|save <text> [tags]|delete <id>|prune|clear]');
     }
   } catch (e) {
     console.error('[AgentSoul] Memory error:', e.message);
